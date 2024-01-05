@@ -1,0 +1,74 @@
+import random
+import pygame
+import time
+import math
+
+class Prey:
+
+    def __init__(self, screen):
+        self.position = pygame.Vector2(random.randint(1, screen.get_width()), random.randint(1, screen.get_height()))
+        self.screen = screen
+        self.moveFlag = False
+        self.newCenterX = None
+        self.newCenterY = None
+        self.radius = 5
+        #self.body = pygame.draw.circle(screen, "red", self.vector, 7)
+
+    def move(self, query = 1):
+
+        if self.moveFlag == False:
+            condition = random.randint(1,100)
+            if 1 < condition < 5:
+                self.position.y -= 5
+            if 6 < condition < 10:
+                self.position.y += 5
+            if 11 < condition < 15:
+                self.position.x -= 5
+            if 16 < condition < 20:
+                self.position.x += 5
+            if 21 < condition < 99:
+                pass
+            if condition == 100:
+                self.newCenterX = random.randint(1, int(self.screen.get_width()) - 1)
+                self.newCenterY = random.randint(1, int(self.screen.get_height()) - 1)
+                self.moveFlag = True
+        else:
+            if self.position.x != self.newCenterX and self.position.y != self.newCenterY:
+                if self.position.x < self.newCenterX:
+                    self.position.x += 1
+                elif self.position.x > self.newCenterX:
+                    self.position.x -= 1
+
+                if self.position.y < self.newCenterY:
+                    self.position.y += 1
+                elif self.position.y > self.newCenterY:
+                    self.position.y -= 1
+            else:
+                self.moveFlag = False
+
+
+    def setScreen(self, screen):
+        self.position = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
+        self.screen = screen
+
+    def calculate_vector(self,predator):
+        predator_x, predator_y = predator.position.x, predator.position.y
+
+        # Calculate vector components
+        dx = self.position.x - predator_x
+        dy = self.position.y - predator_y
+
+        # Normalize the vector
+        distance = math.sqrt(dx ** 2 + dy ** 2)
+        if distance == 0:
+            return 0, 0  # Avoid division by zero
+        else:
+            return dx / distance, dy / distance
+
+    def flee(self, predator):
+        away_vector = self.calculate_vector(predator)
+        self.position.x += away_vector[0]
+        self.position.y += away_vector[1]
+
+    def draw(self):
+        pygame.draw.circle(self.screen, "green", (self.position.x, self.position.y), self.radius)
