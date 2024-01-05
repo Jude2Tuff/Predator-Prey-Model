@@ -1,74 +1,243 @@
-import random
 import pygame
+import sys
+from Prey import Prey
+import numpy as np
+from scipy.integrate import odeint
+import matplotlib.pyplot as plt
 import time
+from Predator import Predator
 import math
 
-class Prey:
-
-    def __init__(self, screen):
-        self.position = pygame.Vector2(random.randint(1, screen.get_width()), random.randint(1, screen.get_height()))
-        self.screen = screen
-        self.moveFlag = False
-        self.newCenterX = None
-        self.newCenterY = None
-        self.radius = 5
-        #self.body = pygame.draw.circle(screen, "red", self.vector, 7)
-
-    def move(self, query = 1):
-
-        if self.moveFlag == False:
-            condition = random.randint(1,100)
-            if 1 < condition < 5:
-                self.position.y -= 5
-            if 6 < condition < 10:
-                self.position.y += 5
-            if 11 < condition < 15:
-                self.position.x -= 5
-            if 16 < condition < 20:
-                self.position.x += 5
-            if 21 < condition < 99:
-                pass
-            if condition == 100:
-                self.newCenterX = random.randint(1, int(self.screen.get_width()) - 1)
-                self.newCenterY = random.randint(1, int(self.screen.get_height()) - 1)
-                self.moveFlag = True
-        else:
-            if self.position.x != self.newCenterX and self.position.y != self.newCenterY:
-                if self.position.x < self.newCenterX:
-                    self.position.x += 1
-                elif self.position.x > self.newCenterX:
-                    self.position.x -= 1
-
-                if self.position.y < self.newCenterY:
-                    self.position.y += 1
-                elif self.position.y > self.newCenterY:
-                    self.position.y -= 1
-            else:
-                self.moveFlag = False
 
 
-    def setScreen(self, screen):
-        self.position = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
-        self.screen = screen
+def newPop(newPrey, newPred, prey_objects, pred_objects, screen):
+    newPrey = math.floor(newPrey)
+    newPred = math.floor(newPred)
+    if newPrey > len(prey_objects):
+        for i in range(newPrey-len(prey_objects)):
+                prey_objects[f"prey{i+len(prey_objects)}"] = Prey(screen)  # Replace PreyObject() with your actual object creation logic
 
-    def calculate_vector(self,predator):
-        predator_x, predator_y = predator.position.x, predator.position.y
+    if newPred > len(pred_objects):
+        for i in range(newPred-len(pred_objects)):
+                pred_objects[f"prey{i+len(pred_objects)}"] = Predator(screen)  # Replace PreyObject() with your actual object creation logic
 
-        # Calculate vector components
-        dx = self.position.x - predator_x
-        dy = self.position.y - predator_y
+    if newPred < len(pred_objects):
+        for i in range(len(pred_objects) - newPred):
+            pred_objects.popitem()
 
-        # Normalize the vector
-        distance = math.sqrt(dx ** 2 + dy ** 2)
-        if distance == 0:
-            return 0, 0  # Avoid division by zero
-        else:
-            return dx / distance, dy / distance
+    if newPrey < len(prey_objects):
+        for i in range(len(prey_objects) - newPrey):
+            prey_objects.popitem()
 
-    def flee(self, predator):
-        away_vector = self.calculate_vector(predator)
-        self.position.x += away_vector[0]
-        self.position.y += away_vector[1]
 
-    def draw(self):
-        pygame.draw.circle(self.screen, "green", (self.position.x, self.position.y), self.radius)
+
+
+
+def spawnPrey(prey_objects, screen):
+    # Assuming you have a loop to create prey objects
+    numPrey = input("Enter how many prey:")
+    for i in range(1, int(numPrey)):  # For example, creating prey1 to prey5
+        prey_objects[f"prey{i}"] = Prey(screen)  # Replace PreyObject() with your actual object creation logic
+
+def spawnPredator(predator_objects, screen):
+    # Assuming you have a loop to create prey objects
+    numPrey = input("Enter how many predators:")
+    for i in range(1, int(numPrey)):  # For example, creating prey1 to prey5
+        predator_objects[f"predator{i}"] = Predator(screen)  # Replace PreyObject() with your actual object creation logic
+
+def rabbitFoxModel(z, t, alpha, beta, gamma, delta):
+    x , y = z
+    dxdt = alpha * x - beta * x * y
+    dydt = -gamma * y + delta * x * y
+    return [dxdt, dydt]
+
+def updatePreyPopulation(preyPop, predPop, preyRepro, preyDeath):
+    newPrey = -((preyDeath) * (preyPop) * (predPop)) / 60 + (preyRepro * preyPop) / 60 + preyPop
+    return newPrey
+
+def updatePredatorPopulation(preyPop, predPop, predRepro, predDeath):
+    newPred = -((predDeath)*(predPop))/60 + (predRepro*predPop*preyPop)/60 + predPop
+    return newPred
+
+def updateBoth(preyPop, predPop, preyRepro, preyDeath, predRepro, predDeath):
+    newPrey = -((preyDeath)*(preyPop)*(predPop))/60 + (preyRepro*preyPop)/60 + preyPop
+    newPred = -((predDeath)*(predPop))/60 + (predRepro*predPop*preyPop)/60 + predPop
+    return newPrey, newPred
+
+def is_near(predator, prey, threshold_distance):
+    predator_x, predator_y = predator.position.x, predator.position.y
+    prey_x, prey_y = prey.position.x, prey.position.y
+    distance = math.sqrt((predator_x - prey_x)**2 + (predator_y - prey_y)**2)
+    return distance <= threshold_distance
+
+
+def move_away(circle_to_move, other_circle, speed=3):
+    dx = circle_to_move.position.x - other_circle.position.x
+    dy = circle_to_move.position.y - other_circle.position.y
+    distance = math.sqrt(dx**2 + dy**2)
+
+
+    angle = math.atan2(dy, dx)
+    step_x = speed * math.cos(angle)
+    step_y = speed * math.sin(angle)
+
+        # Gradually move the circle away
+    circle_to_move.position.x += int(step_x)
+    circle_to_move.position.y += int(step_y)
+
+def move_towards(circle_to_move, other_circle, speed = 2):
+    dx = circle_to_move.position.x - other_circle.position.x
+    dy = circle_to_move.position.y - other_circle.position.y
+    distance = math.sqrt(dx ** 2 + dy ** 2)
+
+    angle = math.atan2(dy, dx)
+    step_x = speed * math.cos(angle)
+    step_y = speed * math.sin(angle)
+
+    # Gradually move the circle away
+    other_circle.position.x += math.ceil(step_x)
+    other_circle.position.y += math.ceil(step_y)
+
+
+
+
+
+
+
+def main():
+    pygame.init()
+
+    width, height = 800, 600
+    screen = pygame.display.set_mode((width,height))
+    pygame.display.set_caption("Predator-Prey Simulation")
+
+    black = (0, 0, 0)
+    white = (255, 255, 255)
+
+
+
+
+
+    prey_objects = {}
+    spawnPrey(prey_objects, screen)
+
+    predator_objects = {}
+    spawnPredator(predator_objects, screen)
+
+
+    modelNum = input("List of Models:\n1. Rabbit and Fox\nWhich one?")
+    initial_conditions = [len(prey_objects), len(predator_objects)]
+    if modelNum == "1":
+        preyReproductionRate = 1.1
+        predReproductionRate = 0.1
+        predDeathRate = 0.4
+        predationRate = 0.4
+
+
+    plt.ion()
+    plt.ylim(0, 5)
+    plt.xlim(0, 5)
+    plt.show()
+
+    # Initialize the starting points
+    xdata1, ydata1 = [], []
+    xdata2, ydata2 = [], []
+
+    point1, = plt.plot(xdata1, ydata1, "g^", markersize=4)
+    point2, = plt.plot(xdata2, ydata2, "bo", markersize=4)
+
+    time = 0
+    preyPop = len(prey_objects)
+    predPop = len(predator_objects)
+
+    threshold_distance = 200
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        screen.fill(black)
+
+        for i in prey_objects:
+            pygame.draw.circle(screen, "green", prey_objects[i].position, 6)
+
+            for predator_name, predator in predator_objects.items():
+                if is_near(predator, prey_objects[i], threshold_distance):
+                    move_away(prey_objects[i], predator)
+                else:
+                    prey_objects[i].move()
+
+
+
+        for i in predator_objects:
+            pygame.draw.circle(screen, "blue", predator_objects[i].position, 10)
+
+            for prey_name, prey in prey_objects.items():
+                if is_near(prey, predator_objects[i], threshold_distance):
+                    move_towards(prey, predator_objects[i])
+                else:
+                    predator_objects[i].move()
+                    pass
+
+        time += 1 / 60
+
+
+
+        xdata1.append(time)
+        ydata1.append(updatePreyPopulation(preyPop, predPop, preyReproductionRate, predationRate))
+
+        xdata2.append(time)
+        ydata2.append(updatePredatorPopulation(preyPop, predPop, predReproductionRate, predDeathRate))
+
+        # Update the entire lines
+        point1.set_data(xdata1, ydata1)
+        point2.set_data(xdata2, ydata2)
+
+
+        if len(ydata1) > 1 and abs(int(ydata1[len(ydata1)-2]) - int(ydata1[len(ydata1) - 1])) == 1:
+            prevPop = int(ydata1[len(ydata1)-2])
+            nextPop = int(ydata1[len(ydata1) - 1])
+            if prevPop > nextPop:
+                minDistance = None
+                for i in predator_objects:
+                    for prey_name, prey in prey_objects.items():
+                        distance = math.sqrt((predator_objects[i].position.y - prey.position.y)**2 + (predator_objects[i].position.x - prey.position.x)**2)
+                        if minDistance == None or distance < minDistance:
+                            minDistance = distance
+                            predNum = i
+                            targetPrey = prey
+            print(predNum, prey)
+            move_towards(targetPrey, predator_objects[predNum], 5)
+
+
+
+
+
+        # Adjust x-axis and y-axis limits to fit both lines
+        margin = 0.5
+        plt.xlim(min(min(xdata1), min(xdata2)) - margin, max(max(xdata1), max(xdata2)) + margin)
+        plt.ylim(min(min(ydata1), min(ydata2)) - margin, max(max(ydata1), max(ydata2)) + margin)
+
+        plt.pause(0.000000001)
+
+        preyPop, predPop = updateBoth(preyPop, predPop, preyReproductionRate, predationRate, predReproductionRate, predDeathRate)
+
+        newPop(preyPop, predPop, prey_objects, predator_objects, screen)
+        pygame.time.Clock().tick(60)
+        pygame.display.flip()
+
+
+
+
+
+
+
+
+
+main()
+
+
+
+
